@@ -55,3 +55,11 @@ INSERT INTO seeds (source, value) VALUES
 ON CONFLICT (source, value) DO NOTHING;
 UPDATE seeds SET active = false WHERE source = 'youtube'
   AND value IN ('wedding planning checklist', 'teacher classroom resources');
+
+-- Pinterest Trends filters (2026-11-12): broad terms, each returns matching top keywords.
+INSERT INTO seeds (source, value) VALUES
+  ('pinterest','planner'), ('pinterest','budget'), ('pinterest','meal plan'), ('pinterest','resume'),
+  ('pinterest','notion'), ('pinterest','homeschool'), ('pinterest','wedding budget'), ('pinterest','adhd'),
+  ('pinterest','spreadsheet'), ('pinterest','printable'), ('pinterest','canva template'), ('pinterest','habit tracker'),
+  ('pinterest','study'), ('pinterest','lightroom presets'), ('pinterest','ebook')
+ON CONFLICT (source, value) DO NOTHING;

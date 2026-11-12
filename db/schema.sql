@@ -56,3 +56,19 @@ CREATE TABLE IF NOT EXISTS seeds (
   active    BOOLEAN NOT NULL DEFAULT true,
   UNIQUE (source, value)
 );
+
+-- Pinterest Trends: weekly search interest for keywords matching our seeds.
+CREATE TABLE IF NOT EXISTS pinterest_trends (
+  id            BIGSERIAL PRIMARY KEY,
+  collected_on  DATE NOT NULL DEFAULT current_date,
+  region        TEXT NOT NULL,              -- US, GB+IE, CA, AU+NZ
+  seed          TEXT NOT NULL,              -- the include_keywords filter used
+  keyword       TEXT NOT NULL,
+  pct_wow       INTEGER,                    -- growth week over week (10001 = new)
+  pct_mom       INTEGER,
+  pct_yoy       INTEGER,
+  last_value    INTEGER,                    -- latest weekly volume, normalised 0-100
+  time_series   JSONB,
+  UNIQUE (collected_on, region, keyword)
+);
+CREATE INDEX IF NOT EXISTS pinterest_trends_keyword ON pinterest_trends (keyword, collected_on);

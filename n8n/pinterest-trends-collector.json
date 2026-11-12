@@ -1,0 +1,185 @@
+{
+  "name": "Niche research – Pinterest Trends collector",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "name": "Weekly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get seeds",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s.value AS seed, r.region FROM seeds s CROSS JOIN (VALUES ('US'), ('GB+IE'), ('CA'), ('AU+NZ')) AS r(region) WHERE s.source = 'pinterest' AND s.active ORDER BY s.value, r.region;",
+        "options": {}
+      }
+    },
+    {
+      "name": "Get trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "OpMlTZWDmqQgFavy",
+          "name": "Pinterest API token"
+        }
+      },
+      "parameters": {
+        "url": "={{ 'https://api.pinterest.com/v5/trends/keywords/' + encodeURIComponent($json.region) + '/top/monthly' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "include_keywords",
+              "value": "={{ $json.seed }}"
+            },
+            {
+              "name": "limit",
+              "value": "50"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1200
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Parse trends",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// One row per trending keyword; Pinterest returns only keywords, no user data.\nconst out = [];\nconst seeds = $('Get seeds').all();\n$input.all().forEach((item, i) => {\n  const { seed, region } = seeds[i].json;\n  for (const t of item.json.trends || []) {\n    const series = t.time_series || {};\n    const dates = Object.keys(series).sort();\n    out.push({ json: {\n      region, seed,\n      keyword: t.keyword,\n      pct_wow: t.pct_growth_wow,\n      pct_mom: t.pct_growth_mom,\n      pct_yoy: t.pct_growth_yoy,\n      last_value: dates.length ? series[dates[dates.length - 1]] : null,\n      time_series: JSON.stringify(series),\n    }});\n  }\n});\nreturn out;\n"
+      }
+    },
+    {
+      "name": "Save trends",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pinterest_trends"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly": {
+      "main": [
+        [
+          {
+            "node": "Get seeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get seeds": {
+      "main": [
+        [
+          {
+            "node": "Get trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get trends": {
+      "main": [
+        [
+          {
+            "node": "Parse trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse trends": {
+      "main": [
+        [
+          {
+            "node": "Save trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

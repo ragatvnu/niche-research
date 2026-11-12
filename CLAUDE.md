@@ -26,6 +26,7 @@ Goal: find in-demand digital product niches from real data (what people want, se
 |---|---|---|---|
 | Reddit RSS | oQyPfpHryaFcmt7H | every 3h | paused: server IP gets 429; waiting for Data API approval |
 | YouTube comments | Qcrw9sH0KXkFKRhb | every 12h | live, ~2,200 of 10,000 quota units/day |
+| Pinterest Trends | rg2bNuqURO8PcdQG | weekly, Mon 06:00 | live; top keywords matching `pinterest` seeds in US, GB+IE, CA, AU+NZ (60 req/min limit) |
 
 ## 4. Analysis (done by Claude in a session, no AI API key)
 Run when the user asks ("do the research"):
