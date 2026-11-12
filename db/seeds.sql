@@ -31,3 +31,19 @@ INSERT INTO seeds (source, value) VALUES
   ('youtube','lightroom presets sell'),
   ('youtube','teacher printables tpt')
 ON CONFLICT (source, value) DO NOTHING;
+
+-- Buyer-side YouTube queries (2026-11-12): what end customers ask for, not sellers.
+INSERT INTO seeds (source, value) VALUES
+  ('youtube','best notion template for students'),
+  ('youtube','budget spreadsheet template'),
+  ('youtube','adhd planner'),
+  ('youtube','wedding planning checklist'),
+  ('youtube','teacher classroom resources'),
+  ('youtube','meal planner printable'),
+  ('youtube','resume template'),
+  ('youtube','small business templates')
+ON CONFLICT (source, value) DO NOTHING;
+
+-- Low-yield seller queries, kept for history but no longer collected.
+UPDATE seeds SET active = false WHERE source = 'youtube'
+  AND value IN ('spreadsheet template business', 'notion template ideas', 'printable planner etsy');
