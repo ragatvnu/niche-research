@@ -63,3 +63,12 @@ INSERT INTO seeds (source, value) VALUES
   ('pinterest','spreadsheet'), ('pinterest','printable'), ('pinterest','canva template'), ('pinterest','habit tracker'),
   ('pinterest','study'), ('pinterest','lightroom presets'), ('pinterest','ebook')
 ON CONFLICT (source, value) DO NOTHING;
+
+-- 2026-11-12: test B2B / automation ideas against the same data as other niches.
+INSERT INTO seeds (source, value) VALUES
+  ('youtube','n8n workflow template'),
+  ('youtube','notion for video editors'),
+  ('youtube','agency client onboarding notion'),
+  ('youtube','receipt tracker automation'),
+  ('pinterest','n8n'), ('pinterest','automation'), ('pinterest','client onboarding'), ('pinterest','freelance')
+ON CONFLICT (source, value) DO NOTHING;
