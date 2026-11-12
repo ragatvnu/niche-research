@@ -1,0 +1,226 @@
+{
+  "name": "Niche research – Reddit RSS collector",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "name": "Every 3 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get subreddits",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT value AS subreddit FROM seeds WHERE source = 'reddit' AND active ORDER BY value;",
+        "options": {}
+      }
+    },
+    {
+      "name": "Fetch RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "=https://www.reddit.com/r/{{ $json.subreddit }}/new/.rss?limit=25",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "niche-research/0.1 (read-only research; contact u/CreatorIntelHQ)"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3000
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Parse posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Parse Reddit Atom feeds into raw_posts rows. Usernames are deliberately not stored.\nconst decode = (s = '') => s\n  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"')\n  .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))\n  .replace(/&#(\\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');\nconst strip = (html) => decode(decode(html).replace(/<[^>]+>/g, ' ')).replace(/\\s+/g, ' ').trim();\nconst pick = (xml, re) => (xml.match(re) || [])[1] || '';\n\nconst rows = [];\nfor (const item of $input.all()) {\n  const feed = item.json.data;\n  if (typeof feed !== 'string') continue;\n  for (const [, entry] of feed.matchAll(/<entry>([\\s\\S]*?)<\\/entry>/g)) {\n    const id = pick(entry, /<id>([^<]+)<\\/id>/);\n    if (!id.startsWith('t3_')) continue;\n    const body = strip(pick(entry, /<content[^>]*>([\\s\\S]*?)<\\/content>/))\n      .replace(/\\s*submitted by\\s+\\/u\\/[\\s\\S]*$/i, '').replace(/\\/?u\\/[\\w-]+/g, '[user]').trim();\n    rows.push({ json: {\n      source: 'reddit',\n      external_id: id,\n      channel: pick(entry, /<category term=\"([^\"]+)\"/),\n      url: pick(entry, /<link href=\"([^\"]+)\"/),\n      title: strip(pick(entry, /<title>([\\s\\S]*?)<\\/title>/)),\n      body: body.slice(0, 5000),\n      posted_at: pick(entry, /<published>([^<]+)<\\/published>/) || pick(entry, /<updated>([^<]+)<\\/updated>/),\n    }});\n  }\n}\nreturn rows;\n"
+      }
+    },
+    {
+      "name": "Save new posts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "name",
+          "value": "raw_posts"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      }
+    },
+    {
+      "name": "Every night 03:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        220
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Delete posts older than 90 days",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM raw_posts WHERE collected_at < now() - interval '90 days';",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every 3 hours": {
+      "main": [
+        [
+          {
+            "node": "Get subreddits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get subreddits": {
+      "main": [
+        [
+          {
+            "node": "Fetch RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch RSS": {
+      "main": [
+        [
+          {
+            "node": "Parse posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse posts": {
+      "main": [
+        [
+          {
+            "node": "Save new posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every night 03:00": {
+      "main": [
+        [
+          {
+            "node": "Delete posts older than 90 days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

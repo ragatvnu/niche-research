@@ -1,0 +1,57 @@
+{
+  "name": "Niche research – DB setup",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "niche-setup-1794468701920",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "niche-setup-5eb18dffe8e0f9f3",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "name": "Run schema and seeds",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Niche research schema. Safe to re-run.\n\n-- Everything collected, from every platform.\nCREATE TABLE IF NOT EXISTS raw_posts (\n  id            BIGSERIAL PRIMARY KEY,\n  source        TEXT NOT NULL,              -- reddit | pinterest | etsy | gumroad\n  external_id   TEXT NOT NULL,              -- the platform's own id, for dedupe\n  channel       TEXT,                       -- subreddit, search keyword, category\n  url           TEXT,\n  title         TEXT,\n  body          TEXT,\n  score         INTEGER,                    -- upvotes / saves / reviews\n  num_comments  INTEGER,\n  price         NUMERIC(10,2),              -- marketplaces only\n  posted_at     TIMESTAMPTZ,\n  collected_at  TIMESTAMPTZ NOT NULL DEFAULT now(),\n  processed_at  TIMESTAMPTZ,                -- set once AI has extracted needs\n  raw           JSONB,\n  UNIQUE (source, external_id)\n);\nCREATE INDEX IF NOT EXISTS raw_posts_unprocessed ON raw_posts (collected_at) WHERE processed_at IS NULL;\nCREATE INDEX IF NOT EXISTS raw_posts_source_posted ON raw_posts (source, posted_at);\n\n-- Buyer needs extracted by AI from raw posts.\nCREATE TABLE IF NOT EXISTS needs (\n  id            BIGSERIAL PRIMARY KEY,\n  raw_post_id   BIGINT NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,\n  topic         TEXT NOT NULL,              -- e.g. \"adhd planner\"\n  category      TEXT,                       -- printable | template | ebook | course | asset | software | prompt\n  problem       TEXT NOT NULL,              -- the need in one sentence\n  buyer_type    TEXT,                       -- e.g. \"college student\"\n  intent        TEXT,                       -- request | complaint | willing_to_pay | recommendation\n  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()\n);\nCREATE INDEX IF NOT EXISTS needs_topic_created ON needs (topic, created_at);\n\n-- Weekly score per niche, combining all phases.\nCREATE TABLE IF NOT EXISTS niche_scores (\n  id              BIGSERIAL PRIMARY KEY,\n  week            DATE NOT NULL,            -- Monday of the week\n  topic           TEXT NOT NULL,\n  need_score      NUMERIC,                  -- Reddit mentions and growth\n  search_score    NUMERIC,                  -- Pinterest / search demand\n  payment_score   NUMERIC,                  -- Etsy / Gumroad proof of sales\n  competition     NUMERIC,\n  total           NUMERIC,\n  notes           TEXT,\n  UNIQUE (week, topic)\n);\n\n-- What to collect: subreddits, keywords, categories.\nCREATE TABLE IF NOT EXISTS seeds (\n  id        SERIAL PRIMARY KEY,\n  source    TEXT NOT NULL,\n  value     TEXT NOT NULL,\n  active    BOOLEAN NOT NULL DEFAULT true,\n  UNIQUE (source, value)\n);\n\n-- Starting seeds: all digital products. Safe to re-run.\nINSERT INTO seeds (source, value) VALUES\n  -- sellers: what sells, what buyers ask for\n  ('reddit','Etsy'), ('reddit','EtsySellers'), ('reddit','Gumroad'), ('reddit','printables'),\n  ('reddit','digitalproducts'), ('reddit','passive_income'), ('reddit','SideProject'),\n  -- templates and productivity\n  ('reddit','Notion'), ('reddit','NotionTemplates'), ('reddit','canva'), ('reddit','excel'),\n  ('reddit','googlesheets'), ('reddit','productivity'), ('reddit','ObsidianMD'),\n  -- planners and life organisation\n  ('reddit','planners'), ('reddit','bulletjournal'), ('reddit','ADHD'), ('reddit','personalfinance'),\n  ('reddit','budget'), ('reddit','weddingplanning'), ('reddit','Mommit'),\n  -- education\n  ('reddit','Teachers'), ('reddit','homeschool'), ('reddit','GetStudying'), ('reddit','languagelearning'),\n  -- creators and assets\n  ('reddit','graphic_design'), ('reddit','photography'), ('reddit','Lightroom'), ('reddit','WeAreTheMusicMakers'),\n  ('reddit','gamedev'), ('reddit','web_design'), ('reddit','ChatGPT'),\n  -- small business and freelancers\n  ('reddit','smallbusiness'), ('reddit','Entrepreneur'), ('reddit','freelance'), ('reddit','socialmediamarketing')\nON CONFLICT (source, value) DO NOTHING;\n\nSELECT (SELECT count(*) FROM seeds) AS seeds, (SELECT count(*) FROM information_schema.tables WHERE table_schema='public') AS tables;",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Run schema and seeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
