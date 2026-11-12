@@ -1,0 +1,54 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(**)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git branch*)",
+      "Bash(git checkout *)",
+      "Bash(gh issue list*)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh issue create *)",
+      "Bash(gh repo view*)",
+      "Bash(gh pr list*)",
+      "Bash(gh pr view *)",
+      "Bash(npm install*)",
+      "Bash(npm run *)",
+      "Bash(npm test*)",
+      "Bash(node *)",
+      "Bash(jq *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(grep *)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(gh issue close *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr merge *)",
+      "Bash(psql *)",
+      "Bash(curl *)",
+      "Bash(docker *)",
+      "Bash(ssh *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/credentials*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(gh repo delete*)",
+      "Bash(gh repo edit*)",
+      "Bash(psql * DROP *)",
+      "Bash(psql * TRUNCATE *)"
+    ]
+  }
+}
