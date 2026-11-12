@@ -80,3 +80,6 @@ INSERT INTO seeds (source, value) VALUES
   ('etsy','notion template'), ('etsy','habit tracker printable'), ('etsy','study planner'),
   ('etsy','canva wedding website template'), ('etsy','lightroom presets')
 ON CONFLICT DO NOTHING;
+
+-- Resume dropped 2026-11-12: too crowded.
+UPDATE seeds SET active = false WHERE value ILIKE '%resume%';
