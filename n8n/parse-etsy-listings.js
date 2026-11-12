@@ -17,7 +17,7 @@ $input.all().forEach((item, i) => {
       quantity: l.quantity,
       is_digital: l.is_digital ?? (l.type === 'download'),
       created_at: l.created_timestamp ? new Date(l.created_timestamp * 1000).toISOString() : null,
-      tags: `{${(l.tags || []).map(t => '"' + t.replace(/"/g, '') + '"').join(',')}}`,
+      tags: l.tags || [],
       url: l.url ? l.url.split('?')[0] : null,
     }});
   });
