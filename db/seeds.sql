@@ -47,3 +47,11 @@ ON CONFLICT (source, value) DO NOTHING;
 -- Low-yield seller queries, kept for history but no longer collected.
 UPDATE seeds SET active = false WHERE source = 'youtube'
   AND value IN ('spreadsheet template business', 'notion template ideas', 'printable planner etsy');
+
+-- 2026-11-12: wedding checklist returned off-topic drama, teacher resources almost no comments.
+INSERT INTO seeds (source, value) VALUES
+  ('youtube','wedding budget spreadsheet'),
+  ('youtube','homeschool planner')
+ON CONFLICT (source, value) DO NOTHING;
+UPDATE seeds SET active = false WHERE source = 'youtube'
+  AND value IN ('wedding planning checklist', 'teacher classroom resources');
