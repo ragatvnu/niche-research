@@ -27,21 +27,24 @@ Goal: find in-demand digital product niches from real data (what people want, se
 | Reddit RSS | oQyPfpHryaFcmt7H | every 3h | paused: server IP gets 429; waiting for Data API approval |
 | YouTube comments | Qcrw9sH0KXkFKRhb | every 12h | live, ~2,200 of 10,000 quota units/day |
 | Pinterest Trends | rg2bNuqURO8PcdQG | weekly, Mon 06:00 | live; top keywords matching `pinterest` seeds in US, GB+IE, CA, AU+NZ (60 req/min limit) |
+| Etsy listings | not imported yet | weekly, Mon 07:00 | waiting for Etsy app approval (`n8n/etsy-collector.json`) |
+| Niche scores | x5XZ0cP59qkeMsEv | weekly, Mon 08:00 | runs `refresh_niche_scores()`; read `niche_report` |
 
 ## 4. Analysis (done by Claude in a session, no AI API key)
 Run when the user asks ("do the research"):
 1. Export unprocessed rows that look like needs (questions, "is there", "I need", "can't find", "would pay", "struggling"...).
 2. Read them and group into topics. Skip spam, self-promotion, and comments about the video itself.
 3. Insert into `needs`: `topic` (short, lowercase, reuse existing names), `category` (printable | template | ebook | course | asset | software | prompt | other), `problem` (one sentence), `buyer_type`, `intent` (request | complaint | willing_to_pay | recommendation).
-4. Mark every exported row `processed_at = now()`, including skipped ones.
-5. Delete any local export files.
-6. Report to the user: new topics, biggest topics, anything growing.
+4. Map each new topic in `niche_map` (niche + Pinterest/Etsy seed). Name a niche `... (dropped)` to exclude it from scoring.
+5. Mark every exported row `processed_at = now()`, including skipped ones.
+6. Delete any local export files.
+7. Report to the user: new topics, biggest topics, anything growing.
 
 Keep in mind who is talking: YouTube "how to sell" videos attract sellers, not end buyers. Tag `buyer_type` honestly and look for end-buyer queries too.
 
 ## 5. Scoring and decision
 - A niche needs 30-50+ mentions before it counts; 4+ weekly data points before calling it "growing".
-- Weekly score in `niche_scores`: need (mentions + growth) + search demand (Pinterest/Trends) + proof of payment (Etsy/Gumroad sales) - competition.
+- Weekly score in `niche_scores` (function `refresh_niche_scores`, view `niche_report`; formula in `db/schema.sql`): need (mentions + growth) + search demand (Pinterest/Trends) + proof of payment (Etsy/Gumroad sales) - competition.
 - Pick a niche when the top 5-10 stay stable for 3 weekly reports and it passes 2 of 3 checks (need, search, payment).
 - Then: 30-day test product on Gumroad. Pivot rule: no sales and fewer than 100 subscribers after 90 days.
 
