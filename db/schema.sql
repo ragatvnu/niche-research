@@ -72,3 +72,46 @@ CREATE TABLE IF NOT EXISTS pinterest_trends (
   UNIQUE (collected_on, region, keyword)
 );
 CREATE INDEX IF NOT EXISTS pinterest_trends_keyword ON pinterest_trends (keyword, collected_on);
+
+-- Etsy: weekly snapshot of active listings per seed keyword (proof of payment + competition).
+CREATE TABLE IF NOT EXISTS etsy_listings (
+  id            BIGSERIAL PRIMARY KEY,
+  collected_on  DATE NOT NULL DEFAULT current_date,
+  seed          TEXT NOT NULL,              -- search keyword used
+  rank          INTEGER,                    -- position in Etsy relevance results
+  listing_id    BIGINT NOT NULL,
+  shop_id       BIGINT,
+  title         TEXT,
+  price         NUMERIC(10,2),
+  currency      TEXT,
+  num_favorers  INTEGER,
+  views         INTEGER,
+  quantity      INTEGER,
+  is_digital    BOOLEAN,
+  created_at    TIMESTAMPTZ,                -- listing creation date
+  tags          TEXT[],
+  url           TEXT,
+  UNIQUE (collected_on, seed, listing_id)
+);
+CREATE INDEX IF NOT EXISTS etsy_listings_seed ON etsy_listings (seed, collected_on);
+
+-- Etsy search totals per seed (how crowded a keyword is).
+CREATE TABLE IF NOT EXISTS etsy_search_counts (
+  collected_on  DATE NOT NULL DEFAULT current_date,
+  seed          TEXT NOT NULL,
+  total_count   INTEGER,
+  PRIMARY KEY (collected_on, seed)
+);
+
+-- Etsy shops seen in results; transaction_sold_count is the sales proxy.
+CREATE TABLE IF NOT EXISTS etsy_shops (
+  collected_on           DATE NOT NULL DEFAULT current_date,
+  shop_id                BIGINT NOT NULL,
+  shop_name              TEXT,
+  transaction_sold_count INTEGER,
+  review_count           INTEGER,
+  review_average         NUMERIC(3,2),
+  listing_active_count   INTEGER,
+  created_at             TIMESTAMPTZ,
+  PRIMARY KEY (collected_on, shop_id)
+);

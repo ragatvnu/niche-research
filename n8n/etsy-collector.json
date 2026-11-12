@@ -1,0 +1,387 @@
+{
+  "name": "Etsy listings collector",
+  "nodes": [
+    {
+      "id": "Weekly",
+      "name": "Weekly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "Get seeds",
+      "name": "Get seeds",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT value AS seed FROM seeds WHERE source = 'etsy' AND active ORDER BY value;",
+        "options": {}
+      }
+    },
+    {
+      "id": "Search listings",
+      "name": "Search listings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ETSY_CRED_ID",
+          "name": "Etsy API key"
+        }
+      },
+      "parameters": {
+        "url": "https://openapi.etsy.com/v3/application/listings/active",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "keywords",
+              "value": "={{ $json.seed }}"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            },
+            {
+              "name": "sort_on",
+              "value": "score"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "Parse listings",
+      "name": "Parse listings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        -150
+      ],
+      "parameters": {
+        "jsCode": "// One row per listing. Etsy listings hold no buyer data.\nconst out = [];\nconst seeds = $('Get seeds').all();\n$input.all().forEach((item, i) => {\n  const seed = seeds[i].json.seed;\n  (item.json.results || []).forEach((l, rank) => {\n    const p = l.price || {};\n    out.push({ json: {\n      seed, rank: rank + 1,\n      listing_id: l.listing_id,\n      shop_id: l.shop_id,\n      title: l.title,\n      price: p.divisor ? p.amount / p.divisor : null,\n      currency: p.currency_code,\n      num_favorers: l.num_favorers,\n      views: l.views,\n      quantity: l.quantity,\n      is_digital: l.is_digital ?? (l.type === 'download'),\n      created_at: l.created_timestamp ? new Date(l.created_timestamp * 1000).toISOString() : null,\n      tags: `{${(l.tags || []).map(t => '\"' + t.replace(/\"/g, '') + '\"').join(',')}}`,\n      url: l.url ? l.url.split('?')[0] : null,\n    }});\n  });\n});\nreturn out;\n"
+      }
+    },
+    {
+      "id": "Parse counts",
+      "name": "Parse counts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// Total active listings per seed: how crowded the keyword is.\nconst seeds = $('Get seeds').all();\nreturn $input.all().map((item, i) => ({ json: { seed: seeds[i].json.seed, total_count: item.json.count ?? null } }));\n"
+      }
+    },
+    {
+      "id": "Save listings",
+      "name": "Save listings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        800,
+        -150
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "name",
+          "value": "etsy_listings"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      }
+    },
+    {
+      "id": "Save counts",
+      "name": "Save counts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        800,
+        150
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "name",
+          "value": "etsy_search_counts"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      }
+    },
+    {
+      "id": "Unique shops",
+      "name": "Unique shops",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -350
+      ],
+      "parameters": {
+        "jsCode": "// Shops behind the top 25 results per seed, deduplicated.\nconst ids = new Set();\nfor (const item of $input.all()) if (item.json.rank <= 25 && item.json.shop_id) ids.add(item.json.shop_id);\nreturn [...ids].map(shop_id => ({ json: { shop_id } }));\n"
+      }
+    },
+    {
+      "id": "Get shop",
+      "name": "Get shop",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        -350
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ETSY_CRED_ID",
+          "name": "Etsy API key"
+        }
+      },
+      "parameters": {
+        "url": "={{ 'https://openapi.etsy.com/v3/application/shops/' + $json.shop_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "Parse shops",
+      "name": "Parse shops",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -350
+      ],
+      "parameters": {
+        "jsCode": "// Unique shops from this run; only shop-level totals, no owner names kept beyond the shop name.\nconst out = [];\nfor (const item of $input.all()) {\n  const s = item.json;\n  if (!s.shop_id) continue;\n  out.push({ json: {\n    shop_id: s.shop_id,\n    shop_name: s.shop_name,\n    transaction_sold_count: s.transaction_sold_count,\n    review_count: s.review_count,\n    review_average: s.review_average,\n    listing_active_count: s.listing_active_count,\n    created_at: s.create_date ? new Date(s.create_date * 1000).toISOString() : null,\n  }});\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "Save shops",
+      "name": "Save shops",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1400,
+        -350
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "name",
+          "value": "etsy_shops"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly": {
+      "main": [
+        [
+          {
+            "node": "Get seeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get seeds": {
+      "main": [
+        [
+          {
+            "node": "Search listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search listings": {
+      "main": [
+        [
+          {
+            "node": "Parse listings",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parse counts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse listings": {
+      "main": [
+        [
+          {
+            "node": "Save listings",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Unique shops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse counts": {
+      "main": [
+        [
+          {
+            "node": "Save counts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unique shops": {
+      "main": [
+        [
+          {
+            "node": "Get shop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get shop": {
+      "main": [
+        [
+          {
+            "node": "Parse shops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse shops": {
+      "main": [
+        [
+          {
+            "node": "Save shops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

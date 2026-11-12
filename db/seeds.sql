@@ -72,3 +72,11 @@ INSERT INTO seeds (source, value) VALUES
   ('youtube','receipt tracker automation'),
   ('pinterest','n8n'), ('pinterest','automation'), ('pinterest','client onboarding'), ('pinterest','freelance')
 ON CONFLICT (source, value) DO NOTHING;
+
+-- Etsy listing searches (weekly): proof of payment and competition per product type.
+INSERT INTO seeds (source, value) VALUES
+  ('etsy','adhd planner'), ('etsy','budget spreadsheet'), ('etsy','meal planner printable'),
+  ('etsy','resume template'), ('etsy','wedding budget spreadsheet'), ('etsy','homeschool planner'),
+  ('etsy','notion template'), ('etsy','habit tracker printable'), ('etsy','study planner'),
+  ('etsy','canva wedding website template'), ('etsy','lightroom presets')
+ON CONFLICT DO NOTHING;
