@@ -1,0 +1,290 @@
+{
+  "name": "Niche research – YouTube comments collector",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "name": "Twice a day",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get queries",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT value AS query FROM seeds WHERE source = 'youtube' AND active ORDER BY value;",
+        "options": {}
+      }
+    },
+    {
+      "name": "Search videos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "w8t65yUSfSxNVEbJ",
+          "name": "YouTube API key"
+        }
+      },
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet"
+            },
+            {
+              "name": "type",
+              "value": "video"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "order",
+              "value": "relevance"
+            },
+            {
+              "name": "maxResults",
+              "value": "10"
+            },
+            {
+              "name": "publishedAfter",
+              "value": "={{ $now.minus({days: 60}).toISO() }}"
+            },
+            {
+              "name": "relevanceLanguage",
+              "value": "en"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Split videos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// One item per video found by the search, carrying the query that found it.\nconst out = [];\nfor (const [i, item] of $input.all().entries()) {\n  const query = $('Get queries').all()[i]?.json.query;\n  for (const v of item.json.items || []) {\n    if (!v.id?.videoId) continue;\n    out.push({ json: { query, video_id: v.id.videoId, video_title: v.snippet?.title ?? '' } });\n  }\n}\nreturn out;\n"
+      }
+    },
+    {
+      "name": "Get comments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "w8t65yUSfSxNVEbJ",
+          "name": "YouTube API key"
+        }
+      },
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/commentThreads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet"
+            },
+            {
+              "name": "videoId",
+              "value": "={{ $json.video_id }}"
+            },
+            {
+              "name": "order",
+              "value": "relevance"
+            },
+            {
+              "name": "maxResults",
+              "value": "50"
+            },
+            {
+              "name": "textFormat",
+              "value": "plainText"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Parse comments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Turn YouTube commentThreads responses into raw_posts rows. Author names are deliberately not stored.\nconst videos = Object.fromEntries($('Split videos').all().map((v) => [v.json.video_id, v.json]));\nconst rows = [];\nfor (const item of $input.all()) {\n  for (const t of item.json.items || []) {\n    const c = t.snippet?.topLevelComment?.snippet;\n    if (!c?.textDisplay) continue;\n    const text = c.textDisplay.replace(/@[\\w.-]+/g, '[user]').replace(/\\s+/g, ' ').trim();\n    if (text.length < 25) continue; // skip \"great video!\" noise\n    rows.push({ json: {\n      source: 'youtube',\n      external_id: t.id,\n      channel: videos[c.videoId]?.query ?? null,\n      url: `https://www.youtube.com/watch?v=${c.videoId}&lc=${t.id}`,\n      title: videos[c.videoId]?.video_title ?? null,\n      body: text.slice(0, 5000),\n      score: c.likeCount ?? 0,\n      num_comments: t.snippet.totalReplyCount ?? 0,\n      posted_at: c.publishedAt,\n    }});\n  }\n}\nreturn rows;\n"
+      }
+    },
+    {
+      "name": "Save new comments",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bIyoGDLnutKs8Cap",
+          "name": "Niche research DB"
+        }
+      },
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "name",
+          "value": "raw_posts"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Twice a day": {
+      "main": [
+        [
+          {
+            "node": "Get queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get queries": {
+      "main": [
+        [
+          {
+            "node": "Search videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search videos": {
+      "main": [
+        [
+          {
+            "node": "Split videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split videos": {
+      "main": [
+        [
+          {
+            "node": "Get comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get comments": {
+      "main": [
+        [
+          {
+            "node": "Parse comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse comments": {
+      "main": [
+        [
+          {
+            "node": "Save new comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
